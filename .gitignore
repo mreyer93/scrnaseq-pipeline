@@ -1,0 +1,30 @@
+# Pipeline outputs and downloaded data
+results/
+test/data/
+*.h5ad
+*.h5
+*.mtx
+*.fastq
+*.fastq.gz
+_report_figures/
+.alevin_fry_home/
+
+# Snakemake
+.snakemake/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# R
+.Rhistory
+.RData
+
+# macOS
+.DS_Store
+
+# Local editor/session settings
+.claude/
+.vscode/

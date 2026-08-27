@@ -1,0 +1,310 @@
+---
+title: "`r params$project_name`"
+subtitle: "Single-cell RNA-seq analysis report"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+params:
+  project_name: "Single-cell RNA-seq analysis"
+  outdir: "results"
+  scripts_dir: "."
+  figures_dir: "results/figures"
+  tables_dir: "results/tables"
+  metrics_dir: "results/metrics"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    self_contained: true
+    theme: flatly
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    latex_engine: tectonic
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      out.width = "100%", fig.align = "center")
+suppressPackageStartupMessages({ library(knitr) })
+
+figdir <- params$figures_dir
+tabdir <- params$tables_dir
+
+read_tsv_safe <- function(name) {
+    p <- file.path(tabdir, paste0(name, ".tsv"))
+    if (!file.exists(p)) return(NULL)
+    out <- tryCatch(read.delim(p, check.names = FALSE), error = function(e) NULL)
+    if (is.null(out) || nrow(out) == 0) return(NULL)
+    out
+}
+fig_exists <- function(name) file.exists(file.path(figdir, paste0(name, ".png")))
+
+# Figures are produced by the Python stages and live outside the render directory.
+# By default knitr rewrites an image path to be relative to the output document, which
+# breaks when the figures and the report sit on different branches of the tree.
+# rel_path = FALSE keeps the absolute path, which both the self-contained HTML
+# (base64-embedded at render time) and the LaTeX/PDF path resolve correctly.
+show_fig <- function(name, caption = NULL) {
+    src <- file.path(figdir, paste0(name, ".png"))
+    if (!file.exists(src)) {
+        cat("\n*Figure", name, "was not produced for this run.*\n\n")
+        return(invisible(NULL))
+    }
+    knitr::include_graphics(normalizePath(src), rel_path = FALSE)
+}
+note_missing <- function(what) {
+    cat("\n*", what, "was not available for this run - this section is omitted.*\n\n")
+}
+
+# Each stage writes its own <stage>.json; merge them here. A stage that did not run
+# simply has no file, and get_metric() then returns the supplied default.
+metrics <- list()
+if (dir.exists(params$metrics_dir) && requireNamespace("jsonlite", quietly = TRUE)) {
+    for (f in list.files(params$metrics_dir, pattern = "\\.json$", full.names = TRUE)) {
+        m <- tryCatch(jsonlite::fromJSON(f, simplifyVector = TRUE),
+                      error = function(e) NULL)
+        if (!is.null(m)) metrics <- utils::modifyList(metrics, m)
+    }
+}
+get_metric <- function(section, key, default = NA) {
+    v <- tryCatch(metrics[[section]][[key]], error = function(e) NULL)
+    if (is.null(v) || length(v) == 0) return(default)
+    if (length(v) > 1) return(paste(v, collapse = ", "))
+    v
+}
+```
+
+# Overview
+
+```{r overview}
+ov <- data.frame(
+    Item = c("Samples", "Cells before QC", "Cells after QC", "Cells analysed",
+             "Genes analysed", "Doublets removed", "Clusters",
+             "Batch integration", "Marker genes"),
+    Value = c(
+        get_metric("qc", "n_samples"),
+        get_metric("qc", "cells_before"),
+        get_metric("qc", "cells_after"),
+        get_metric("cluster", "cells"),
+        get_metric("cluster", "n_hvg"),
+        get_metric("doublets", "removed"),
+        get_metric("cluster", "n_clusters"),
+        get_metric("cluster", "integration"),
+        get_metric("markers", "n_markers")
+    ), stringsAsFactors = FALSE)
+ov$Value <- as.character(ov$Value)
+ov <- ov[!is.na(ov$Value) & ov$Value != "NA", ]
+kable(ov, row.names = FALSE, caption = "Analysis summary")
+```
+
+Cells were quality-filtered, screened for doublets, normalised and clustered following
+the Scanpy workflow described in the
+[single-cell best-practices book](https://www.sc-best-practices.org/). Each section below
+states the thresholds actually used, and the tables behind every figure are in
+`tables/`.
+
+# Quality control
+
+```{r qc-thresh}
+th <- tryCatch(metrics[["qc"]][["thresholds"]], error = function(e) NULL)
+if (!is.null(th) && length(th)) {
+    d <- data.frame(Threshold = names(th),
+                    Value = as.character(unlist(lapply(th, function(x)
+                        if (is.null(x) || length(x) == 0) "none" else as.character(x)))),
+                    stringsAsFactors = FALSE)
+    kable(d, row.names = FALSE, caption = "Cell/gene filtering thresholds applied")
+}
+```
+
+```{r qc-before}
+show_fig("qc_before")
+```
+
+Distributions **before** filtering: genes detected per cell, total UMI counts per cell,
+and the percentage of counts from mitochondrial genes. Low gene counts indicate empty or
+dying droplets; a high mitochondrial fraction indicates stressed or lysing cells; very
+high counts can indicate doublets.
+
+```{r qc-after}
+show_fig("qc_after")
+```
+
+```{r qc-tables}
+before <- read_tsv_safe("qc_per_sample_before")
+after <- read_tsv_safe("qc_per_sample_after")
+if (!is.null(before)) kable(before, row.names = FALSE, digits = 1,
+                            caption = "Per sample, before filtering")
+if (!is.null(after)) kable(after, row.names = FALSE, digits = 1,
+                           caption = "Per sample, after filtering")
+filt <- read_tsv_safe("qc_filtering")
+if (!is.null(filt)) kable(filt, row.names = FALSE,
+                          caption = "Cells/genes removed, by reason")
+```
+
+`r if (identical(as.character(get_metric("qc","mito_genes_found")), "0")) "**Note:** no mitochondrial genes were found in this dataset, so the mitochondrial-fraction filter removed nothing. This is expected when gene identifiers are Ensembl IDs rather than symbols."`
+
+# Doublet detection
+
+```{r doublets}
+if (identical(as.character(get_metric("doublets", "enabled")), "FALSE")) {
+    cat("\n*Doublet detection was disabled for this run.*\n\n")
+} else {
+    show_fig("doublet_scores")
+    d <- read_tsv_safe("doublets_per_sample")
+    if (!is.null(d)) kable(d, row.names = FALSE, digits = 2,
+                           caption = "Scrublet results per sample")
+}
+```
+
+Doublets — droplets that captured two cells — otherwise appear as artificial
+"intermediate" clusters that can be mistaken for transitional cell states. Scrublet
+simulates doublets from the observed data and scores each barcode against them. Scoring
+is done per sample, because doublet rate depends on how heavily each library was loaded.
+
+# Clustering and structure
+
+```{r umap-clusters}
+show_fig("umap_leiden")
+```
+
+```{r cluster-params}
+cp <- data.frame(
+    Parameter = c("Highly variable genes", "Principal components", "Neighbours",
+                  "Leiden resolution", "Clusters found", "Integration"),
+    Value = as.character(c(
+        get_metric("cluster", "n_hvg"), get_metric("cluster", "n_pcs"),
+        get_metric("cluster", "n_neighbors"), get_metric("cluster", "resolution"),
+        get_metric("cluster", "n_clusters"), get_metric("cluster", "integration"))),
+    stringsAsFactors = FALSE)
+kable(cp[!is.na(cp$Value) & cp$Value != "NA", ], row.names = FALSE,
+      caption = "Clustering parameters")
+```
+
+Cluster count is a direct consequence of the Leiden `resolution` parameter — it is a
+granularity dial, not a discovered quantity. Raising it splits clusters, lowering it
+merges them. Treat clusters as a working partition to be validated against marker genes
+and known biology, not as an objective number of cell types.
+
+```{r umap-sample}
+show_fig("umap_sample")
+```
+
+```{r integration-note, results='asis'}
+integ <- as.character(get_metric("cluster", "integration"))
+if (identical(integ, "none")) {
+    cat("\nBatch integration was **not** applied. If the UMAP above separates by sample ",
+        "rather than by cell type, that separation may be technical; consider setting ",
+        "`integration.method: harmony`.\n\n", sep = "")
+} else {
+    cat("\nBatches were integrated with **", integ, "**. Integration can also remove ",
+        "genuine biological differences between samples, so compare against an ",
+        "unintegrated run before drawing conclusions about sample-specific populations.\n\n",
+        sep = "")
+}
+```
+
+```{r qc-umaps}
+for (f in c("umap_pct_counts_mt", "umap_n_genes_by_counts", "umap_doublet_score")) {
+    if (fig_exists(f)) show_fig(f)
+}
+```
+
+```{r composition}
+show_fig("cluster_composition")
+comp <- read_tsv_safe("cluster_sizes")
+if (!is.null(comp)) kable(comp, row.names = FALSE, caption = "Cells per cluster")
+```
+
+```{r pca-var}
+show_fig("pca_variance")
+```
+
+# Marker genes
+
+```{r markers}
+m <- read_tsv_safe("markers")
+if (is.null(m)) {
+    note_missing("Marker gene results")
+} else {
+    top <- do.call(rbind, lapply(split(m, m$cluster), function(d) head(d, 5)))
+    cols <- intersect(c("cluster", "gene", "logfoldchange", "pval_adj"), colnames(top))
+    kable(top[, cols], row.names = FALSE, digits = c(0, 0, 2, 6),
+          caption = "Top 5 marker genes per cluster")
+}
+```
+
+```{r marker-figs}
+show_fig("marker_dotplot")
+show_fig("marker_heatmap")
+```
+
+Markers were identified with a Wilcoxon rank-sum test comparing each cluster against all
+others. **These p-values are computed on the same cells used to define the clusters**, so
+they are anti-conservative by construction and should be read as a ranking rather than as
+evidence that a cluster is statistically real. The full table is in
+`tables/markers_all.tsv`.
+
+```{r marker-umaps}
+gene_figs <- list.files(figdir, pattern = "^umap_gene_.*\\.png$")
+for (f in head(gene_figs, 6)) show_fig(sub("\\.png$", "", f))
+```
+
+# Cell type annotation
+
+```{r annotation}
+ann <- read_tsv_safe("cluster_annotation")
+scores <- read_tsv_safe("cell_type_scores")
+if (is.null(ann)) {
+    cat("\n*No marker sets were configured, so clusters are left unlabelled.* ",
+        "Add `annotation.marker_sets` to the config to get provisional labels, or ",
+        "annotate manually from the marker genes above.\n\n", sep = "")
+} else {
+    kable(ann, row.names = FALSE, caption = "Provisional cluster labels")
+    show_fig("umap_cell_type")
+    show_fig("cell_type_scores")
+    if (!is.null(scores)) kable(scores, row.names = FALSE, digits = 3,
+                                caption = "Mean marker-set score per cluster")
+    cat("\nLabels are assigned by whichever supplied marker set scores highest in each ",
+        "cluster, and are marked *low confidence* when the top two sets score nearly ",
+        "equally. They are a starting hypothesis, only ever as good as the marker sets ",
+        "provided, and should be confirmed against the marker genes and known biology ",
+        "before being reported.\n\n", sep = "")
+}
+```
+
+# Methods and provenance
+
+```{r provenance}
+prov <- data.frame(
+    Item = c("Report generated", "Workflow", "Filtering", "Doublets",
+             "Normalisation", "Clustering", "Markers", "Output directory"),
+    Value = c(
+        format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+        "Scanpy, following sc-best-practices.org",
+        sprintf("min_genes=%s, max_pct_mt=%s",
+                get_metric("qc", "cells_after", ""), get_metric("qc", "mito_genes_found", "")),
+        if (identical(as.character(get_metric("doublets", "enabled")), "FALSE"))
+            "not run" else "Scrublet, per sample",
+        "shifted log (normalize_total + log1p)",
+        sprintf("Leiden, resolution %s", get_metric("cluster", "resolution")),
+        sprintf("Wilcoxon rank-sum (%s significant)", get_metric("markers", "n_markers")),
+        normalizePath(params$outdir, mustWork = FALSE)),
+    stringsAsFactors = FALSE)
+kable(prov, row.names = FALSE, caption = "Provenance")
+```
+
+The annotated `AnnData` object is at `h5ad/04_annotated.h5ad` and can be loaded directly
+for further analysis:
+
+```
+import anndata as ad
+adata = ad.read_h5ad("h5ad/04_annotated.h5ad")
+```
+
+**Interpretation caveats.** Cluster count depends on the resolution parameter and is not
+an objective property of the data. Marker gene p-values are inflated by double-dipping
+(clustering and testing on the same cells). Cell-type labels here are computational
+predictions, not ground truth. Differences in cluster proportions between samples are
+*not* tested for significance in this report — with few biological replicates, apparent
+compositional shifts are frequently noise, and testing them properly requires a method
+that accounts for the compositional nature of the data.

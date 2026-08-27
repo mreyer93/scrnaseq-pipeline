@@ -1,0 +1,87 @@
+# Cloud / server configuration.
+#
+# Starts from raw FASTQ and quantifies with simpleaf (piscem index + alevin-fry), the
+# same default nf-core/scrnaseq uses. Building a human splici index needs roughly 16-32 GB
+# RAM and an hour; quantification is fast afterwards. Large experiments (hundreds of
+# thousands of cells) also want more RAM than a laptop has for the clustering stage.
+#
+# To start from existing count matrices instead, use config_local.yaml.
+
+project_name: "My single-cell project (cloud)"
+
+# matrix | fastq
+input_mode: "fastq"
+
+# Sample sheet: needs sample, fastq_1 and fastq_2 columns. Both reads are required -
+# R1 carries the cell barcode and UMI, R2 the cDNA.
+samplesheet: "config/samples.csv"
+
+outdir: "results"
+
+# ------------------------------------------------------------------- quantification ---
+reference:
+  genome_fasta: "/mnt/data/reference/genome.fa"
+  gtf: "/mnt/data/reference/annotation.gtf"
+  read_length: 91          # biological read length; used to size the splici index
+
+chemistry: "10xv3"         # 10xv2 | 10xv3 | 10xv4 | see `simpleaf quant --help`
+resolution_strategy: "cr-like"   # UMI resolution; cr-like matches Cell Ranger
+
+# ------------------------------------------------------------------ quality control ---
+qc:
+  min_genes: 200          # drop cells with fewer detected genes (empty/dying droplets)
+  max_genes: null         # optional upper bound; very high can indicate doublets
+  min_counts: 0           # optional minimum total UMIs per cell
+  max_pct_mt: 20          # drop cells above this % mitochondrial counts (stressed cells)
+  min_cells_per_gene: 3   # drop genes detected in fewer cells than this
+
+# --------------------------------------------------------------------- doublets --------
+doublets:
+  enabled: true
+  expected_rate: 0.06     # ~6% is typical for a 10x lane loaded for ~5000 cells
+  threshold: null         # null = let Scrublet pick from the simulated distribution
+  remove: true            # false annotates without removing, to inspect first
+
+# --------------------------------------------------------- clustering / embedding ------
+cluster:
+  target_sum: 10000       # counts per cell after normalisation
+  n_hvg: 2000             # highly variable genes used for PCA
+  scale: true
+  n_pcs: 50
+  n_neighbors: 15
+  resolution: 1.0         # Leiden granularity: higher = more clusters
+
+# ------------------------------------------------------------------ integration --------
+# Only meaningful with more than one batch. Harmony corrects batch structure but can also
+# remove real biological differences between samples - leave 'none' unless you need it.
+integration:
+  method: "harmony"       # none | harmony
+  batch_key: "sample"     # 'sample', or any sample sheet column
+
+# -------------------------------------------------------------------- markers ----------
+markers:
+  method: "wilcoxon"
+  n_top: 25
+  padj: 0.05
+  min_logfc: 0.25
+
+# ------------------------------------------------------------------ annotation ---------
+# Optional. Each cluster is scored against these gene sets and given a provisional label.
+# The example below is a PBMC set; replace it with markers for your own tissue, or delete
+# the block to leave clusters unlabelled.
+annotation:
+  marker_sets:
+    T_cell:      ["CD3D", "CD3E", "CD2", "IL7R"]
+    B_cell:      ["MS4A1", "CD79A", "CD79B"]
+    NK_cell:     ["GNLY", "NKG7", "KLRD1"]
+    Monocyte:    ["CD14", "LYZ", "S100A8", "FCGR3A"]
+    Dendritic:   ["FCER1A", "CST3"]
+    Platelet:    ["PPBP", "PF4"]
+
+# ---------------------------------------------------------------------- report ---------
+make_report: true
+report_pdf: true          # needs tectonic (envs/r.yml); set false to skip
+
+# ---------------------------------------------------------------------- resources ------
+threads:
+  quant: 16

@@ -1,0 +1,75 @@
+# Local / laptop configuration.
+#
+# Starts from existing count matrices - which is what you normally receive from a
+# sequencing core, a collaborator, or a public dataset. Downstream analysis of a typical
+# droplet experiment (a few thousand to a few tens of thousands of cells) runs
+# comfortably in 8-16 GB of RAM.
+#
+# To go from raw FASTQ instead, use config_cloud.yaml.
+
+project_name: "My single-cell project"
+
+# matrix | fastq
+input_mode: "matrix"
+
+# Sample sheet: CSV or TSV. Needs a sample-name column and a 'matrix' column pointing at
+# a 10x directory (containing matrix.mtx.gz + barcodes + features), a Cell Ranger .h5,
+# or an .h5ad. Add condition/batch/etc. columns to carry metadata through.
+samplesheet: "config/samples_example.csv"
+
+outdir: "results"
+
+# ------------------------------------------------------------------ quality control ---
+qc:
+  min_genes: 200          # drop cells with fewer detected genes (empty/dying droplets)
+  max_genes: null         # optional upper bound; very high can indicate doublets
+  min_counts: 0           # optional minimum total UMIs per cell
+  max_pct_mt: 20          # drop cells above this % mitochondrial counts (stressed cells)
+  min_cells_per_gene: 3   # drop genes detected in fewer cells than this
+
+# --------------------------------------------------------------------- doublets --------
+doublets:
+  enabled: true
+  expected_rate: 0.06     # ~6% is typical for a 10x lane loaded for ~5000 cells
+  threshold: null         # null = let Scrublet pick from the simulated distribution
+  remove: true            # false annotates without removing, to inspect first
+
+# --------------------------------------------------------- clustering / embedding ------
+cluster:
+  target_sum: 10000       # counts per cell after normalisation
+  n_hvg: 2000             # highly variable genes used for PCA
+  scale: true
+  n_pcs: 50
+  n_neighbors: 15
+  resolution: 1.0         # Leiden granularity: higher = more clusters
+
+# ------------------------------------------------------------------ integration --------
+# Only meaningful with more than one batch. Harmony corrects batch structure but can also
+# remove real biological differences between samples - leave 'none' unless you need it.
+integration:
+  method: "none"          # none | harmony
+  batch_key: "sample"     # 'sample', or any sample sheet column
+
+# -------------------------------------------------------------------- markers ----------
+markers:
+  method: "wilcoxon"
+  n_top: 25
+  padj: 0.05
+  min_logfc: 0.25
+
+# ------------------------------------------------------------------ annotation ---------
+# Optional. Each cluster is scored against these gene sets and given a provisional label.
+# The example below is a PBMC set; replace it with markers for your own tissue, or delete
+# the block to leave clusters unlabelled.
+annotation:
+  marker_sets:
+    T_cell:      ["CD3D", "CD3E", "CD2", "IL7R"]
+    B_cell:      ["MS4A1", "CD79A", "CD79B"]
+    NK_cell:     ["GNLY", "NKG7", "KLRD1"]
+    Monocyte:    ["CD14", "LYZ", "S100A8", "FCGR3A"]
+    Dendritic:   ["FCER1A", "CST3"]
+    Platelet:    ["PPBP", "PF4"]
+
+# ---------------------------------------------------------------------- report ---------
+make_report: true
+report_pdf: true          # needs tectonic (envs/r.yml); set false to skip

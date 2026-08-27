@@ -1,0 +1,5 @@
+sample,matrix,condition,batch
+PBMC_healthy_1,/path/to/cellranger/PBMC_healthy_1/outs/filtered_feature_bc_matrix,healthy,b1
+PBMC_healthy_2,/path/to/cellranger/PBMC_healthy_2/outs/filtered_feature_bc_matrix,healthy,b2
+PBMC_disease_1,/path/to/cellranger/PBMC_disease_1/filtered_feature_bc_matrix.h5,disease,b1
+PBMC_disease_2,/path/to/data/PBMC_disease_2.h5ad,disease,b2

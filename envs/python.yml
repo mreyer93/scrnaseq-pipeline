@@ -1,0 +1,22 @@
+# Analysis environment: Scanpy and the single-cell stack.
+# mamba env create -f envs/python.yml -n scrnaseq
+name: scrnaseq
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - scanpy>=1.10
+  - anndata
+  - leidenalg          # Leiden clustering
+  - python-igraph
+  - scrublet           # doublet detection
+  - harmonypy          # batch integration (optional, config-gated)
+  - scikit-learn
+  - scikit-misc        # needed by the seurat_v3 HVG flavor
+  - matplotlib-base
+  - seaborn
+  - pandas
+  - numpy
+  - scipy
+  - h5py

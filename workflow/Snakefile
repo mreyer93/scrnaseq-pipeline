@@ -1,0 +1,54 @@
+"""
+Single-cell RNA-seq pipeline: count matrix (or FASTQ) -> QC -> doublets -> clustering
+-> marker genes -> report.
+
+Analysis follows the Scanpy workflow described in the single-cell best-practices book
+(https://www.sc-best-practices.org/), and the FASTQ path uses simpleaf/alevin-fry, the
+same default as nf-core/scrnaseq.
+
+Two input modes:
+  input_mode: matrix   start from existing count matrices  (config/config_local.yaml)
+  input_mode: fastq    quantify from raw reads first        (config/config_cloud.yaml)
+
+Run:
+  snakemake --configfile config/config_local.yaml --use-conda --cores 4
+Check first:
+  snakemake --configfile config/config_local.yaml -n
+"""
+
+from snakemake.exceptions import WorkflowError
+
+include: "rules/common.smk"
+if INPUT_MODE == "fastq":
+    include: "rules/quantify.smk"
+include: "rules/analysis.smk"
+
+
+rule all:
+    input: final_outputs()
+
+
+onsuccess:
+    print("\n" + "=" * 72)
+    print("  Pipeline finished.")
+    print(f"  Report   : {join(OUTDIR, 'report', 'scrnaseq_report.html')}")
+    print(f"  AnnData  : {join(OUTDIR, 'h5ad', '04_annotated.h5ad')}")
+    print(f"  Markers  : {join(TABLES_DIR, 'markers.tsv')}")
+    print(f"  Figures  : {FIGURES_DIR}/")
+    print("=" * 72 + "\n")
+
+
+onerror:
+    print("\n" + "=" * 72)
+    print("  Pipeline FAILED.")
+    print(f"  Per-stage logs are under {join(OUTDIR, 'logs')}/ - each stage prints the")
+    print("  reason for failure at the end of its log rather than only a traceback.")
+    print("  Common causes:")
+    print("   - all cells filtered out: QC thresholds too strict for this dataset;")
+    print("     look at figures/qc_before.png and relax qc.min_genes / qc.max_pct_mt")
+    print("   - 0 mitochondrial genes found: var_names are Ensembl IDs, not symbols,")
+    print("     so the mito filter does nothing - convert IDs or set max_pct_mt: 100")
+    print("   - out of memory: reduce cluster.n_hvg / subsample cells, or use the cloud VM")
+    print("   - matrix not recognised: run")
+    print("     python scripts/samplesheet.py <sheet> matrix")
+    print("=" * 72 + "\n")

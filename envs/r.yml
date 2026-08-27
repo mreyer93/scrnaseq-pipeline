@@ -1,0 +1,12 @@
+# Report rendering only. The analysis itself is Python/Scanpy; this environment just
+# assembles the figures and tables it produced into an HTML/PDF report.
+name: scrnaseq-r
+channels:
+  - conda-forge
+dependencies:
+  - r-base>=4.3
+  - r-rmarkdown
+  - r-knitr
+  - r-jsonlite
+  - pandoc
+  - tectonic        # LaTeX engine for the PDF report

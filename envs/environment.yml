@@ -1,0 +1,17 @@
+# Upstream environment: FASTQ -> count matrix (only needed for input_mode: fastq).
+# simpleaf/alevin-fry is the same default nf-core/scrnaseq uses; Cell Ranger is not
+# included because it is proprietary and cannot be redistributed via conda.
+name: scrnaseq-quant
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - snakemake>=7.32,<8
+  - simpleaf
+  - alevin-fry
+  - piscem
+  - pyroe               # reads alevin-fry output into AnnData
+  - anndata
+  - scipy
+  - pandas
