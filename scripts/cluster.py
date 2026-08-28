@@ -105,12 +105,26 @@ def run():
     integrated = False
     if integration_cfg.get("method", "none") == "harmony" and hvg_batch:
         try:
-            import scanpy.external as sce
-            sce.pp.harmony_integrate(adata, key=hvg_batch, basis="X_pca",
-                                     adjusted_basis="X_pca_harmony")
+            # harmonypy is called directly rather than through
+            # scanpy.external.pp.harmony_integrate: that wrapper assumes a fixed
+            # orientation for harmonypy's corrected matrix, and with current harmonypy
+            # releases it writes back a wrongly-shaped array, so integration silently
+            # fails. Checking the orientation ourselves works with either convention.
+            import harmonypy
+
+            ho = harmonypy.run_harmony(adata.obsm["X_pca"], adata.obs, [hvg_batch])
+            Z = np.asarray(getattr(ho, "Z_corr"))
+            if Z.shape[0] != adata.n_obs:
+                Z = Z.T
+            if Z.shape[0] != adata.n_obs:
+                raise ValueError(
+                    f"Harmony returned a {Z.shape} matrix; expected one axis to be "
+                    f"{adata.n_obs} cells")
+            adata.obsm["X_pca_harmony"] = Z
             use_rep = "X_pca_harmony"
             integrated = True
-            log(f"Integrated batches with Harmony on {hvg_batch!r}")
+            log(f"Integrated batches with Harmony on {hvg_batch!r} "
+                f"(corrected embedding {Z.shape})")
         except Exception as e:
             log(f"WARNING: Harmony integration failed ({e}); continuing unintegrated. "
                 f"Any batch structure in the UMAP is therefore uncorrected.")

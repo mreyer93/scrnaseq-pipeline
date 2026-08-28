@@ -1,5 +1,6 @@
-# Pipeline outputs and downloaded data
-results/
+# Pipeline outputs and downloaded data. Anchored to the repo root so the committed
+# worked example under example/results/ is not swept up by the same rule.
+/results/
 test/data/
 *.h5ad
 *.h5

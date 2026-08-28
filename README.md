@@ -46,6 +46,14 @@ Check the whole thing works first on a small public dataset (~8 MB, 1–2 minute
 That runs PBMC 3k and should recover the expected blood cell types (T, B, NK, monocyte,
 dendritic, platelet) — a quick end-to-end sanity check that the install is sound.
 
+## Worked example
+
+[`example/`](example/README.md) is that run with its figures committed, so you can see what
+the pipeline produces without running it: 4,002 cells, 9 Leiden clusters, Harmony
+integration, and annotation recovering all six expected PBMC populations.
+
+[![UMAP by cell type](example/figures/umap_cell_type.png)](example/README.md)
+
 ## Sample sheets
 
 CSV or TSV. Needs a sample-name column plus either a `matrix` column or `fastq_1`/`fastq_2`.
