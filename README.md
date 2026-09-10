@@ -127,3 +127,10 @@ Being explicit, since these are common expectations:
 - [Harmony](https://github.com/immunogenomics/harmony) — Korsunsky et al., *Nat Methods* 2019
 - [alevin-fry](https://github.com/COMBINE-lab/alevin-fry) — He et al., *Nat Methods* 2022
 - [nf-core/scrnaseq](https://nf-co.re/scrnaseq) — the reference implementation for the FASTQ path
+
+## License
+
+Apache License 2.0 - see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+Third-party tools used by this repository are downloaded at run time and are not
+redistributed here; each keeps its own licence.
