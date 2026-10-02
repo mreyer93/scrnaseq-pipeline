@@ -33,6 +33,10 @@ command -v mamba >/dev/null 2>&1 || CONDA_FLAG="$CONDA_FLAG --conda-frontend con
 # Use every available core by default; set CORES to cap it.
 CORES="${CORES:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}"
 
+# The PDF report needs tectonic, which downloads its TeX support files on first use and
+# caches them. Set REPORT_PDF=0 to skip it (e.g. offline).
+REPORT_PDF=$([[ "${REPORT_PDF:-1}" == "0" ]] && echo false || echo true)
+
 DATA_DIR="test/data"
 mkdir -p "$DATA_DIR"
 
@@ -78,7 +82,7 @@ echo "==> Writing test config"
 sed -e "s|samplesheet: \"config/samples_example.csv\"|samplesheet: \"$REPO_ROOT/$DATA_DIR/samples.csv\"|" \
     -e "s|outdir: \"results\"|outdir: \"$REPO_ROOT/$DATA_DIR/results\"|" \
     -e 's|project_name: "My single-cell project"|project_name: "scRNA-seq smoke test (PBMC 3k)"|' \
-    -e 's|report_pdf: true|report_pdf: false|' \
+    -e "s|report_pdf: true|report_pdf: $REPORT_PDF|" \
     -e 's|method: "none"|method: "harmony"|' \
     config/config_local.yaml > "$DATA_DIR/config_test.yaml"
 
@@ -104,6 +108,35 @@ if [[ -z "$DRY_RUN" ]]; then
         f="$DATA_DIR/results/metrics/$stage.json"
         if [[ -s "$f" ]]; then echo "  OK   $f"; else echo "  MISS $f"; fail=1; fi
     done
+    if [[ "$REPORT_PDF" == "true" ]]; then
+        f="$DATA_DIR/results/report/scrnaseq_report.pdf"
+        if [[ -s "$f" ]]; then echo "  OK   $f"; else echo "  MISS $f"; fail=1; fi
+    fi
+    # Report content. knitr drops, without any error, output that is not the value of a
+    # top-level expression, and shows cat() in an ordinary chunk as "##" console text;
+    # together these once kept 15 of 23 figures and 2 tables out of this report.
+    if [[ $fail -eq 0 ]]; then
+        if python3 - "$DATA_DIR/results/report/scrnaseq_report.html" scripts/scrnaseq_report.Rmd \
+            "$DATA_DIR/results/figures" <<'PY'
+import html, os, re, sys
+page = html.unescape(open(sys.argv[1], encoding="utf-8").read())
+problems = []
+if "<code>## " in page:
+    problems.append("console output ('##') leaked into the report")
+for cap in re.findall(r'caption = "([^"]*)"', open(sys.argv[2]).read()):
+    if cap not in page:
+        problems.append("table missing: " + cap)
+drawn = len([f for f in os.listdir(sys.argv[3]) if f.endswith(".png")])
+shown = len(re.findall(r"<img ", page))
+if shown != drawn:
+    problems.append(f"{shown} images in the report, {drawn} figures drawn")
+for p in problems:
+    print("  REPORT " + p)
+sys.exit(1 if problems else 0)
+PY
+        then echo "  OK   report shows every table and every figure, no console output"
+        else fail=1; fi
+    fi
     echo
     if [[ $fail -eq 0 ]]; then
         n=$(python3 -c "import json;print(json.load(open('$DATA_DIR/results/metrics/cluster.json'))['cluster']['n_clusters'])")

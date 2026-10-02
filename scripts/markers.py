@@ -10,7 +10,9 @@ sets (scanpy's score_genes) and given a best-match label. That is a starting hyp
 for annotation, not an answer - it is only ever as good as the supplied marker sets.
 """
 
+import glob
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -105,10 +107,26 @@ def run():
         except Exception as e:
             log(f"  marker heatmap failed: {e}")
             plt.close("all")
-        for g in top_genes[:6]:
+        # One UMAP per cluster (up to 12), coloured by that cluster's top marker. Ribosomal-
+        # protein genes, mitochondrial genes and MALAT1 are skipped for these plots only:
+        # they often top the ranking of a cluster that differs mainly in RNA content (naive
+        # T cells in PBMCs), and say little about cell identity. Taking the first six genes
+        # of the combined list instead gave five ribosomal genes from cluster 0 and nothing
+        # for most clusters. Files are numbered in cluster order; stale ones are removed
+        # first.
+        var_names = set(adata.raw.var_names if adata.raw else adata.var_names)
+        for old in glob.glob(os.path.join(figures_dir, "umap_gene_*.png")):
+            os.remove(old)
+        umap_genes = []
+        for _, d in top.groupby("cluster", observed=True, sort=False):
+            for g in d["gene"]:
+                if not UNINFORMATIVE_GENE.match(g) and g in var_names and g not in umap_genes:
+                    umap_genes.append(g)
+                    break
+        for i, g in enumerate(umap_genes[:12]):
             try:
                 sc.pl.umap(adata, color=g, show=False, frameon=False, cmap="viridis")
-                save_current_fig(figures_dir, f"umap_gene_{_safe(g)}")
+                save_current_fig(figures_dir, f"umap_gene_{i:02d}_{_safe(g)}")
             except Exception:
                 plt.close("all")
 
@@ -199,6 +217,12 @@ def _score_cell_types(adata, marker_sets, tables_dir, figures_dir):
     fig.tight_layout()
     save_fig(fig, figures_dir, "cell_type_scores")
     return labels
+
+
+# Ribosomal-protein genes (RPS6, RPL32, RPS4X, RPL22L1, the RPLP0-2 stalk; not the RPS6K
+# kinases), mitochondrial genes, and MALAT1 (a nuclear lncRNA abundant in nearly every
+# cell); human or mouse naming
+UNINFORMATIVE_GENE = re.compile(r"^(RP[SL]\d+[A-Z]?\d*|RPLP\d|MT-.*|MALAT1)$", re.IGNORECASE)
 
 
 def _safe(name):

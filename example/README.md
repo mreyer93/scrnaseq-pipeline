@@ -37,7 +37,7 @@ QC → Scrublet doublets → normalisation → HVGs → PCA → Harmony → Leid
 | Highly variable genes | 2,000 |
 | Batch integration | Harmony, on `sample` |
 | Clusters (Leiden, res 1.0) | 9 |
-| Significant markers | 3,819 |
+| Significant markers | 3,790 |
 
 ## Quality control
 
@@ -66,11 +66,16 @@ on the whole pipeline.
 
 | Cluster | Label | | Cluster | Label |
 |---|---|---|---|---|
-| 0 | T cell | | 5 | Dendritic |
-| 1 | T cell | | 6 | NK cell |
-| 2 | NK cell | | 7 | Dendritic |
+| 0 | T cell | | 5 | Monocyte |
+| 1 | NK cell | | 6 | NK cell |
+| 2 | T cell | | 7 | Dendritic |
 | 3 | B cell | | 8 | Platelet |
-| 4 | Monocyte | | | |
+| 4 | Dendritic | | | |
+
+Exact cluster sizes and numbering can shift slightly between platforms and package
+versions: Leiden clusters are numbered by size, so two clusters of similar size can swap
+numbers. A rerun on Apple Silicon recovered the same nine populations, with sizes within
+a few cells of an earlier Intel run; repeated runs on one machine are identical.
 
 ![UMAP by cluster](figures/umap_leiden.png)
 
@@ -89,7 +94,7 @@ remove. It demonstrates that integration runs and does not distort the structure
 ## Full output
 
 The run also produces a self-contained HTML report
-(`results/report/scrnaseq_report.html`) covering QC, doublets, clustering parameters,
+(`results/report/scrnaseq_report.html`, with a PDF copy alongside) covering QC, doublets, clustering parameters,
 marker genes and annotation, with the interpretation caveats stated inline. Selected
 tables are committed here under [`results/`](results/); the annotated `AnnData` object is
 written to `results/h5ad/04_annotated.h5ad`.

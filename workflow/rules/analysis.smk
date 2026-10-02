@@ -103,6 +103,7 @@ rule report_html:
         h5ad = join(OUTDIR, "h5ad", "04_annotated.h5ad"),
         markers = join(TABLES_DIR, "markers.tsv"),
         metrics = metrics_path("markers"),
+        rmd = join(SCRIPTS_DIR, "scrnaseq_report.Rmd"),  # so editing the template re-renders
     output: join(OUTDIR, "report", "scrnaseq_report.html")
     log: join(OUTDIR, "logs", "report_html.log")
     params: rmd = join(SCRIPTS_DIR, "scrnaseq_report.Rmd"), format = "html_document",
@@ -116,6 +117,7 @@ rule report_pdf:
         h5ad = join(OUTDIR, "h5ad", "04_annotated.h5ad"),
         markers = join(TABLES_DIR, "markers.tsv"),
         metrics = metrics_path("markers"),
+        rmd = join(SCRIPTS_DIR, "scrnaseq_report.Rmd"),
     output: join(OUTDIR, "report", "scrnaseq_report.pdf")
     log: join(OUTDIR, "logs", "report_pdf.log")
     params: rmd = join(SCRIPTS_DIR, "scrnaseq_report.Rmd"), format = "pdf_document",

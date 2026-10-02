@@ -5,7 +5,7 @@ channels:
   - conda-forge
 dependencies:
   - r-base>=4.3
-  - r-rmarkdown
+  - r-rmarkdown>=2.32   # older versions fail the PDF when output_dir is not the .Rmd's directory
   - r-knitr
   - r-jsonlite
   - pandoc
